@@ -5,7 +5,6 @@ from .features import FEATURES
 
 
 def parse_evaluation(value: str) -> float:
-    """Parse a white-relative pawn score or a PGN mate score (for example, #-3)."""
     value = value.strip()
     mate = re.fullmatch(r"#([+-]?\d+)", value)
     if mate:

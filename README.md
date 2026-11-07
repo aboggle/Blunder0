@@ -5,10 +5,11 @@ Blunder 0 (BC0) is a UCI-compatible chess engine written in Python. It uses iter
 ## Features
 
 - UCI support for chess GUIs such as Arena, Cute Chess, and Banksia
-- Iterative deepening, aspiration windows, principal-variation search, late-move reductions, and guarded null-move pruning
-- Quiescence search, transposition table, killer/history/countermove ordering
+- Explicit negamax alpha-beta search with iterative deepening, aspiration windows, principal-variation search, late-move reductions, and guarded null-move pruning
+- Quiescence search, capped check extensions, mate-distance pruning, transposition table, killer/history/countermove ordering
 - Positional terms for center control, minor-piece development, king safety, tempo, pawn structure, and piece coordination
 - Optional neural evaluator training from CSV data
+- Cached Lichess Opening Explorer book for early-game moves, with automatic search fallback
 
 ## Requirements
 
@@ -25,6 +26,8 @@ py -m venv .venv
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
+
+To run the test suite or build a Windows executable, install the dev extras (pytest and PyInstaller) instead: `python -m pip install -r requirements-dev.txt` (it also includes the runtime requirements).
 
 If PowerShell blocks virtual environment activation, run this once in that terminal, then activate again:
 
@@ -90,7 +93,9 @@ The engine identifies itself as **Blunder 0**. The GUI can override the default 
 | --- | ---: | --- |
 | `Depth` | 8 | Default search depth, from 1 to 30 |
 | `Hash` | 64 MB | Transposition table size setting |
-| `EvalFile` | empty | Path to a trained `.npz` evaluator |
+| `EvalFile` | `models/evaluator.npz` | Path to a trained `.npz` evaluator, loaded automatically at startup when the file exists in the engine's working directory. Set another path to override it; send an empty value to use only the handcrafted evaluation. |
+| `Blend Handcrafted` | false | When an `EvalFile` is loaded, add the handcrafted positional terms on top of the network output. The default false applies the network alone, since a trained model already encodes the handcrafted positional knowledge; enable only for models trained on material-only targets. |
+| `Lichess Book` | true | Use Lichess's public opening explorer during the opening (requires internet) |
 | `Clear Hash` | — | Clear the transposition table |
 
 Common UCI commands sent by GUIs include:
@@ -103,6 +108,7 @@ Common UCI commands sent by GUIs include:
 | `position startpos [moves ...]` | Set a position from the normal starting position |
 | `position fen <FEN> [moves ...]` | Set a position from FEN |
 | `go depth <n>` | Search to a fixed depth |
+| `go nodes <n>` | Search up to a fixed number of nodes |
 | `go movetime <ms>` | Search for a fixed number of milliseconds |
 | `go wtime <ms> btime <ms> [winc <ms> binc <ms>]` | Search using the remaining clocks and increments |
 | `stop` | Stop the current search |
@@ -153,7 +159,16 @@ Options:
 - `--chunk-size`: rows buffered for shuffling (default: `8192`; must be at least the batch size)
 - `--threads`: BLAS threads used during training (default: `4`)
 
-Load the resulting model in your chess GUI by setting the UCI option `EvalFile` to its full path. Model `.npz` files are ignored by Git, so add or distribute a trained model separately if users need one.
+Training writes `models\evaluator.npz` by default, and the engine loads that file automatically at startup when it exists — no GUI configuration needed. To use a different model, set the `EvalFile` option to its path; to use only the handcrafted evaluation, send an empty `EvalFile` value. Note the engine resolves the model path relative to its working directory, so point a GUI at the BC0 project directory. Model `.npz` files are ignored by Git, so add or distribute a trained model separately if users need one.
+
+## Run the tests
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python -m pytest tests
+```
+
+The suite covers evaluation mirror symmetry, perft move-generation counts, mate detection, transposition-table score handling, UCI command robustness, and the Lichess book's offline behavior.
 
 ## Build a Windows executable
 
@@ -170,6 +185,8 @@ The script creates `dist\bc0.exe`. Run it directly or add it to a chess GUI as a
 .\dist\bc0.exe
 ```
 
+The exe is fully standalone: when a trained `models\evaluator.npz` exists at build time it is bundled into the exe and auto-loaded at startup, so the compiled engine needs no source tree or model files. A freshly retrained `models\evaluator.npz` in the engine's working directory (or an explicit `EvalFile` option) still overrides the bundled one.
+
 ## Project files
 
 ```text
@@ -179,11 +196,20 @@ chess_engine/
   network.py    Neural evaluator and trainer
   search.py     Position evaluation and search
   uci.py        UCI protocol adapter
+  opening_book.py Cached Lichess opening explorer client
+tests/          pytest suite for evaluation, search, and UCI handling
 engine.py       Compatibility entry point
 requirements.txt
+requirements-dev.txt  Test and build extras (pytest, PyInstaller)
 build_exe.ps1   Windows executable build script
+CONTRIBUTING.md Contribution guide
+LICENSE         MIT license
 ```
 
 ## Limitations
 
 BC0 is a compact, CPU-oriented engine and is not at Stockfish strength. Playing strength depends on search time and, when enabled, the quality and score conventions of the training data.
+
+## License
+
+MIT — see `LICENSE`. Contributions are welcome; see `CONTRIBUTING.md`.
