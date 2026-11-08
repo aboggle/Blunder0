@@ -1,7 +1,8 @@
 from pathlib import Path
 import re
 import numpy as np
-from .features import FEATURES
+import chess
+from .features import FEATURES, feature_indices
 
 
 def parse_evaluation(value: str) -> float:
@@ -20,23 +21,8 @@ class Evaluator:
             self.w2, self.b2 = data["w2"], data["b2"]
             self.w3, self.b3 = data["w3"], data["b3"]
 
-    def predict(self, x: np.ndarray) -> float:
-        h1 = np.tanh(x @ self.w1 + self.b1)
-        h2 = np.tanh(h1 @ self.w2 + self.b2)
-        return float((h2 @ self.w3 + self.b3)[0])
-
     def predict_board(self, board) -> float:
-        import chess
-        indices = []
-        for square, piece in board.piece_map().items():
-            sq = square if piece.color == chess.WHITE else chess.square_mirror(square)
-            plane = (piece.piece_type - 1) + (0 if piece.color == chess.WHITE else 6)
-            indices.append(plane * 64 + sq)
-        rights = (board.has_kingside_castling_rights(chess.WHITE),
-                  board.has_queenside_castling_rights(chess.WHITE),
-                  board.has_kingside_castling_rights(chess.BLACK),
-                  board.has_queenside_castling_rights(chess.BLACK))
-        indices.extend(769 + i for i, enabled in enumerate(rights) if enabled)
+        indices = feature_indices(board)
         h1 = self.b1.copy()
         if indices:
             h1 += self.w1[indices].sum(axis=0)
